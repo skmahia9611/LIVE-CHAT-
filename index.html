@@ -72,7 +72,6 @@
         .admin-user-item { transition: background-color 0.2s ease-in-out; }
         .admin-user-item.active { background-color: rgba(70, 130, 180, 0.2); border-right: 3px solid var(--accent-end); }
         .avatar { display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: white; border-radius: 50%; }
-        /* নতুন প্রোফাইল ছবি স্টাইল */
         .profile-pic-container { position: relative; cursor: pointer; }
         .profile-pic-overlay {
             position: absolute; inset: 0; background-color: rgba(0,0,0,0.5); border-radius: 50%;
@@ -84,7 +83,7 @@
 </head>
 <body class="max-w-md mx-auto h-screen overflow-hidden">
 
-    <div id="loader" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]" style="display: none;">
+    <div id="loader" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#4682B4]"></div>
     </div>
 
@@ -174,7 +173,7 @@
         // =================================================================================
         // ধাপ ১: আপনার অ্যাডমিন User ID এখানে বসান
         //==================================================================================
-        const ADMIN_UID = ""; 
+        const ADMIN_UID = "YOUR_ADMIN_UID_HERE"; 
 
         // =================================================================================
         // ধাপ ২: আপনার নিজের Firebase কনফিগারেশন এখানে পেস্ট করুন
@@ -190,11 +189,11 @@
         };
         
         // =================================================================================
-        // মূল কোড শুরু - এখানে পরিবর্তনের প্রয়োজন নেই
+        // মূল কোড শুরু
         // =================================================================================
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, updateDoc, runTransaction } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
         const app = initializeApp(firebaseConfig);
@@ -209,7 +208,6 @@
         const colorPalette = ["#ef4444", "#f97316", "#84cc16", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef", "#ec4899"];
 
         window.onload = () => {
-            loader.style.display = 'flex';
             try { window.Telegram.WebApp.ready(); window.Telegram.WebApp.expand(); } 
             catch (e) { console.warn("Telegram WebApp script not found."); }
             lucide.createIcons();
@@ -226,57 +224,69 @@
                 currentUser = user;
                 await fetchUserData();
                 showMainPage('app-container');
+
                 if (user.uid === ADMIN_UID) {
                     initializeAppAdmin();
                 } else {
                     initializeAppUser();
                 }
             } else {
-                currentUser = null; userData = null;
-                showMainPage('auth-section');
+                try {
+                    await signInAnonymously(auth);
+                } catch(error) {
+                    console.error("Anonymous sign-in failed: ", error);
+                    alert("Chat session could not be started. Please refresh the page.");
+                    loader.style.display = 'none';
+                }
             }
-            loader.style.display = 'none';
         }
 
         async function fetchUserData() {
             if (!currentUser) return;
             const userRef = doc(db, "users", currentUser.uid);
             const userSnap = await getDoc(userRef);
+
             if (!userSnap.exists()) {
-                const defaultData = { 
-                    name: currentUser.email.split('@')[0], 
-                    email: currentUser.email,
-                    photoURL: null // নতুন ফিল্ড
-                };
+                let name = currentUser.isAnonymous ? `Guest-${currentUser.uid.substring(0, 5)}` : currentUser.email.split('@')[0];
+                const defaultData = { name: name, email: currentUser.email, photoURL: null };
                 await setDoc(userRef, defaultData); 
                 userData = defaultData;
             } else { 
                 userData = userSnap.data(); 
             }
-            updateUserProfileUI(); // প্রোফাইল UI আপডেট করার জন্য ফাংশন কল
+            updateUserProfileUI();
         }
 
         function updateUserProfileUI() {
             if (!userData) return;
             const profilePicEl = document.getElementById('user-profile-pic');
-            // যদি photoURL থাকে, সেটি দেখাবে, না থাকলে ডিফল্ট আইকন
-            profilePicEl.src = userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name.charAt(0)}&background=random&color=fff`;
+            const nameToUse = userData.name || 'G';
+            profilePicEl.src = userData.photoURL || `https://ui-avatars.com/api/?name=${nameToUse.charAt(0)}&background=random&color=fff`;
         }
         
         function initializeAppUser() {
+            document.getElementById('logout-btn-user').style.display = 'none';
+            document.getElementById('auth-section').classList.remove('active');
             document.getElementById('admin-panel-view').classList.add('hidden');
             document.getElementById('user-chat-view').classList.remove('hidden');
             document.getElementById('user-chat-view').classList.add('flex');
             loadUserChat();
             listenForAdminStatus();
+            loader.style.display = 'none';
         }
 
+        // পরিবর্তিত কোড: listenForAdminStatus ফাংশনে এরর হ্যান্ডলিং যোগ করা হয়েছে
         function listenForAdminStatus() {
-            if (!ADMIN_UID) return;
+            if (!ADMIN_UID) {
+                console.warn("ADMIN_UID is not set. Admin status will not be available.");
+                return;
+            };
             if (adminStatusListener) adminStatusListener();
+            
             const statusRef = doc(db, 'admin_status', ADMIN_UID);
             const statusEl = document.getElementById('admin-status');
-            
+            statusEl.innerHTML = '<span class="text-yellow-500">●</span> Connecting...';
+
             adminStatusListener = onSnapshot(statusRef, (docSnap) => {
                 if (docSnap.exists() && docSnap.data().lastSeen) {
                     const lastSeen = docSnap.data().lastSeen.toDate();
@@ -292,6 +302,11 @@
                     isAdminOnline = false;
                     statusEl.innerHTML = '<span class="text-gray-500">●</span> Offline';
                 }
+            }, (error) => {
+                // এরর হলে UI তে দেখানো হবে
+                console.error("Error listening to admin status:", error);
+                isAdminOnline = false;
+                statusEl.innerHTML = '<span class="text-red-500">●</span> Status Error';
             });
         }
 
@@ -307,11 +322,13 @@
         }
         
         function initializeAppAdmin() {
+            document.getElementById('auth-section').classList.remove('active');
             document.getElementById('user-chat-view').classList.add('hidden');
             document.getElementById('admin-panel-view').classList.remove('hidden');
             document.getElementById('admin-panel-view').classList.add('flex');
             loadAdminUserList();
             setupAdminHeartbeat();
+            loader.style.display = 'none';
         }
 
         function setupAdminHeartbeat() {
@@ -320,7 +337,7 @@
             const updateStatus = () => setDoc(statusRef, { lastSeen: serverTimestamp() });
             
             updateStatus();
-            adminHeartbeatInterval = setInterval(updateStatus, 60 * 1000); // প্রতি ১ মিনিটে স্ট্যাটাস আপডেট
+            adminHeartbeatInterval = setInterval(updateStatus, 60 * 1000);
         }
         
         function loadAdminUserList() {
@@ -332,10 +349,9 @@
                     const chat = docSnap.data();
                     const el = document.createElement('div');
                     el.className = `admin-user-item flex items-center gap-3 p-3 border-b border-border-color cursor-pointer ${selectedUserId === docSnap.id ? 'active' : ''}`;
-                    const initial = chat.userName.charAt(0).toUpperCase();
+                    const initial = (chat.userName || 'G').charAt(0).toUpperCase();
                     const color = colorPalette[initial.charCodeAt(0) % colorPalette.length];
                     
-                    // ছবি থাকলে ছবি, না থাকলে আদ্যক্ষর দেখাবে
                     const avatarContent = chat.userPhotoURL 
                         ? `<img src="${chat.userPhotoURL}" class="w-10 h-10 rounded-full object-cover">`
                         : `<div class="avatar w-10 h-10 text-lg" style="background-color: ${color}">${initial}</div>`;
@@ -343,13 +359,13 @@
                     el.innerHTML = `
                         ${avatarContent}
                         <div class="flex-grow overflow-hidden">
-                            <p class="font-bold truncate">${chat.userName}</p>
+                            <p class="font-bold truncate">${chat.userName || 'Guest'}</p>
                             <p class="text-sm text-text-secondary truncate">${chat.lastMessage || '...'}</p>
                         </div>`;
                     el.onclick = () => {
                         document.querySelectorAll('.admin-user-item').forEach(d => d.classList.remove('active'));
                         el.classList.add('active');
-                        loadAdminChatForUser(docSnap.id, chat); // পুরো chat অবজেক্ট পাস করা হচ্ছে
+                        loadAdminChatForUser(docSnap.id, chat);
                     };
                     container.appendChild(el);
                 });
@@ -362,13 +378,12 @@
             const chatArea = document.getElementById('admin-chat-area');
             chatArea.classList.remove('hidden'); chatArea.classList.add('flex');
             
-            // হেডারে ব্যবহারকারীর নাম ও ছবি সেট করা
-            document.getElementById('admin-chat-header').textContent = chatData.userName;
+            document.getElementById('admin-chat-header').textContent = chatData.userName || 'Guest';
             const picContainer = document.getElementById('admin-chat-header-pic');
             if (chatData.userPhotoURL) {
                 picContainer.innerHTML = `<img src="${chatData.userPhotoURL}" class="w-10 h-10 rounded-full object-cover">`;
             } else {
-                const initial = chatData.userName.charAt(0).toUpperCase();
+                const initial = (chatData.userName || 'G').charAt(0).toUpperCase();
                 const color = colorPalette[initial.charCodeAt(0) % colorPalette.length];
                 picContainer.innerHTML = `<div class="avatar w-10 h-10 text-lg" style="background-color: ${color}">${initial}</div>`;
             }
@@ -393,12 +408,11 @@
                 await uploadBytes(storageRef, file);
                 const downloadURL = await getDownloadURL(storageRef);
 
-                // Firestore-এ ব্যবহারকারীর তথ্য এবং চ্যাটের তথ্য আপডেট
                 await updateDoc(doc(db, "users", currentUser.uid), { photoURL: downloadURL });
                 await setDoc(doc(db, "support_chats", currentUser.uid), { userPhotoURL: downloadURL }, { merge: true });
 
                 userData.photoURL = downloadURL;
-                updateUserProfileUI(); // UI তে নতুন ছবি দেখানো
+                updateUserProfileUI();
             } catch (error) {
                 console.error("Profile picture upload error:", error);
                 alert("Failed to upload profile picture.");
@@ -475,10 +489,16 @@
         }
 
         function setupEventListeners() {
-            document.getElementById('login-btn').addEventListener('click', handleLogin);
-            [ 'logout-btn-user', 'logout-btn-admin' ].forEach(id => document.getElementById(id).addEventListener('click', () => signOut(auth)));
+            [ 'logout-btn-user', 'logout-btn-admin' ].forEach(id => document.getElementById(id).addEventListener('click', () => signOut(auth).then(() => {
+                if(id === 'logout-btn-admin') {
+                     showMainPage('auth-section');
+                } else {
+                    window.location.reload();
+                }
+            })));
             
-            // প্রোফাইল ছবি আপলোডের জন্য Event Listeners
+            document.getElementById('login-btn').addEventListener('click', handleLogin);
+            
             document.getElementById('user-profile-pic-wrapper').addEventListener('click', () => document.getElementById('profile-pic-input').click());
             document.getElementById('profile-pic-input').addEventListener('change', (e) => {
                 if(e.target.files[0]) handleProfilePictureUpload(e.target.files[0]);
@@ -486,6 +506,7 @@
             });
 
             const userInp = document.getElementById('user-message-input'), userSendBtn = document.getElementById('user-send-btn');
+            
             const userSend = async () => {
                 const text = userInp.value.trim();
                 if(!text) return;
@@ -494,12 +515,23 @@
                 
                 if (!isAdminOnline && ADMIN_UID) {
                     const chatRef = doc(db, 'support_chats', currentUser.uid);
-                    const chatSnap = await getDoc(chatRef);
-                    if (!chatSnap.data()?.autoReplySent) {
-                        const OFFLINE_MESSAGE_TEXT = "এখন আমাদের কাস্টমার প্রতিনিধি সবাই অফলাইনে আছে একটু সময় দিয়ে আমাদেরকে সাথেই থাকুন";
-                        const autoReplyData = { senderId: ADMIN_UID, text: OFFLINE_MESSAGE_TEXT, timestamp: serverTimestamp() };
-                        await addDoc(collection(db, `support_chats/${currentUser.uid}/messages`), autoReplyData);
-                        await setDoc(chatRef, { autoReplySent: true }, { merge: true });
+                    const messagesColRef = collection(db, `support_chats/${currentUser.uid}/messages`);
+                    
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const chatDoc = await transaction.get(chatRef);
+                            
+                            if (!chatDoc.exists() || !chatDoc.data().autoReplySent) {
+                                const OFFLINE_MESSAGE_TEXT = "এখন আমাদের কাস্টমার প্রতিনিধি সবাই অফলাইনে আছে একটু সময় দিয়ে আমাদেরকে সাথেই থাকুন";
+                                const autoReplyData = { senderId: ADMIN_UID, text: OFFLINE_MESSAGE_TEXT, timestamp: serverTimestamp() };
+                                
+                                const newMsgRef = doc(messagesColRef);
+                                transaction.set(newMsgRef, autoReplyData);
+                                transaction.set(chatRef, { autoReplySent: true }, { merge: true });
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Transaction failed: ", e);
                     }
                 }
             };
@@ -515,7 +547,7 @@
                 adminInp.value = '';
                 await sendMessage({ text: text }, false);
                 const chatRef = doc(db, 'support_chats', selectedUserId);
-                await updateDoc(chatRef, { autoReplySent: false });
+                await setDoc(chatRef, { autoReplySent: false }, { merge: true });
             };
             adminSendBtn.addEventListener('click', adminSend);
             adminInp.addEventListener('keypress', (e) => { if (e.key === 'Enter') adminSend(); });
@@ -525,8 +557,13 @@
             const email = document.getElementById('login-email').value, pass = document.getElementById('login-password').value;
             if (!email || !pass) return alert("Please enter email and password.");
             loader.style.display = 'flex';
-            try { await signInWithEmailAndPassword(auth, email, pass); } 
-            catch (error) { alert(error.message); loader.style.display = 'none'; }
+            try { 
+                await signInWithEmailAndPassword(auth, email, pass);
+            } 
+            catch (error) { 
+                alert("Login failed: " + error.message); 
+                loader.style.display = 'none';
+            }
         }
 
         function showMainPage(pageId) {
