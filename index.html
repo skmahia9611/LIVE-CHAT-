@@ -22,16 +22,21 @@
       text-align: center;
       max-width: 400px;
     }
-    button {
+    /* পুরোনো button স্টাইল এখানে আর প্রয়োজন নেই */
+
+    /* লিংকের জন্য নতুন স্টাইল */
+    .link-button {
+      display: inline-block;
       background: #2563eb;
       color: #fff;
-      border: none;
       padding: 10px 20px;
       border-radius: 8px;
       cursor: pointer;
       margin-top: 10px;
+      text-decoration: none; /* লিংক থেকে আন্ডারলাইন সরাতে */
+      font-weight: bold;
     }
-    button:hover {
+    .link-button:hover {
       background: #1d4ed8;
     }
     #status {
@@ -43,9 +48,11 @@
 </head>
 <body>
   <div class="box">
-    <h2>Auto Message Bot</h2>
-    <p>এখানে ক্লিক করলে প্রতি ১ ঘন্টা পর মেসেজ যাবে 🙂</p>
-    <button id="start">🚀 Start Auto Message</button>
+    <h2>GMAIL SHOP BOT</h2>
+    <p>নিচের বাটনে ক্লিক করুন 🙂</p>
+    
+    <a href="https://t.me/GMAIL_SHOP_bot/Shop" class="link-button">🚀 OPEN BOT</a>
+    
     <div id="status"></div>
   </div>
 
@@ -53,27 +60,8 @@
     const tg = window.Telegram.WebApp;
     tg.ready();
 
-    document.getElementById("start").onclick = () => {
-      const chatId = tg.initDataUnsafe?.user?.id;
-      if (!chatId) {
-        document.getElementById("status").innerText = "❌ chat_id পাওয়া যায়নি। Telegram এর ভেতর খুলুন।";
-        return;
-      }
-
-      document.getElementById("status").innerText = "✅ Auto message শুরু হয়েছে!";
-
-      // প্রতি ১ ঘন্টা পরপর মেসেজ পাঠাবে
-      setInterval(() => {
-        fetch("https://api.telegram.org/bot8289959573:AAHEie6TCLFBXtAl5SNSxyBntNDf9A-iwC4/sendMessage", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: "কেমন আছেন? 🤖"
-          })
-        });
-      }, 3600); // 3600000 ms = 1 ঘন্টা
-    };
+    // বোতামটি সরিয়ে দেওয়ায় পুরোনো জাভাস্ক্রিপ্ট কোডটি মুছে ফেলা হয়েছে।
+    // এখন এখানে ক্লিক করলে কোনো মেসেজ যাবে না, শুধু লিংকে নিয়ে যাবে।
   </script>
 </body>
 </html>
